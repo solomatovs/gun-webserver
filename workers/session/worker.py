@@ -1,12 +1,13 @@
-import asyncio
+# worker.py
 import subprocess
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from pydantic import BaseModel
 import secrets
+from fastapi.middleware.cors import CORSMiddleware
 
-# --- CORS ---
 app = FastAPI()
 origins = ["https://gun.muduck.com"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -15,63 +16,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- POST /create_session ---
-from pydantic import BaseModel
-
 class SessionRequest(BaseModel):
     user_id: str
 
-@app.post("/create_session")
-async def create_session(req: SessionRequest):
-    # Заглушка: токен для аутентификации WS
+@app.post("/start_session")
+async def start_session(req: SessionRequest):
     token = secrets.token_hex(16)
 
-    # Можно здесь запускать subprocess на произвольном порту или хранить инфо в Redis
+    # запускаем user_ws_server.py
+    proc = subprocess.Popen(
+        ["python3", "user_ws_server.py", req.user_id],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    # читаем первую строку stdout = порт, на котором поднялся WS сервер
+    port_line = proc.stdout.readline().strip()
+    port = int(port_line)
+
+    # возвращаем gateway информацию фронту
     return {
-        "host": "gate.muduck.com",  # адрес воркера
-        "port": 9001,               # порт воркера (uvicorn)
+        "host": "gate.muduck.com",
+        "port": port,
         "token": token,
         "user_id": req.user_id
     }
-
-# --- WebSocket endpoint ---
-@app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    await ws.accept()
-    try:
-        # Получаем user_id из query параметра
-        user_id = ws.query_params.get("user_id", "anonymous")
-
-        # Запускаем subprocess для конкретного user_id
-        proc = subprocess.Popen(
-            ["python3", "user_process.py", user_id],
-            stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            text=True
-        )
-
-        loop = asyncio.get_event_loop()
-
-        async def send_stdout():
-            while True:
-                line = await loop.run_in_executor(None, proc.stdout.readline)
-                if not line:
-                    break
-                await ws.send_text(line.strip())
-
-        async def receive_ws():
-            try:
-                while True:
-                    data = await ws.receive_text()
-                    if proc.stdin:
-                        proc.stdin.write(data + "\n")
-                        proc.stdin.flush()
-            except WebSocketDisconnect:
-                pass
-
-        # Параллельно читаем stdout и слушаем websocket
-        await asyncio.gather(send_stdout(), receive_ws())
-
-    finally:
-        proc.kill()
-        await ws.close()
