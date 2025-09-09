@@ -1,0 +1,54 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+  
+      {
+        "name": "Debug Gateway",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+            "gateway:app",
+            "--host", "0.0.0.0",
+            "--port", "8000",
+        ],
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}/gateway",
+        "env": {
+          "PYTHONUNBUFFERED": "1"
+        }
+      },
+  
+      {
+        "name": "Debug Worker",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+            "worker:app",
+            
+            "--host", "0.0.0.0",
+            "--port", "9001",
+        ],
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}/workers/session",
+        "env": {
+          "PYTHONUNBUFFERED": "1"
+        }
+      },
+  
+      {
+        "name": "Debug Frontend (Vite)",
+        "type": "node",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/frontend",
+        "runtimeExecutable": "npm",
+        "runtimeArgs": ["run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"],
+        "console": "integratedTerminal",
+        "env": {
+          "DEBUG": "vite:*"
+        }
+      }
+  
+    ]
+  }
